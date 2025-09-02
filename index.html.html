@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Temporizador Deportivo - Con ciclos, pausa y barra</title>
+  <style>
+    :root{
+      --bg:#0f1724;
+      --panel:#16202b;
+      --accent1:#00ff87;
+      --accent2:#60efff;
+      --text:#f5f7fa;
+      --muted:#bfc9d6;
+      --btn:#00c87a;
+    }
+    *{box-sizing:border-box}
+    body{
+      background:linear-gradient(135deg,#071021,#0f1724 60%);
+      color:var(--text);
+      font-family:Inter, "Segoe UI", Roboto, Arial, sans-serif;
+      margin:0;
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+    }
+    .card{
+      width:100%;
+      max-width:460px;
+      background:var(--panel);
+      border-radius:14px;
+      padding:20px;
+      box-shadow:0 10px 30px rgba(0,0,0,0.6);
+    }
+    h1{
+      margin:0 0 10px 0;
+      font-size:1.2rem;
+      color:var(--accent2);
+      text-align:center;
+    }
+    .row{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:center;
+      margin-top:12px;
+      flex-wrap:wrap;
+    }
+    label{font-size:0.86rem;color:var(--muted)}
+    input[type="number"]{
+      width:110px;
+      padding:8px 10px;
+      border-radius:8px;
+      border:1px solid rgba(255,255,255,0.05);
+      background:rgba(255,255,255,0.03);
+      color:var(--text);
+      font-size:1rem;
+      text-align:center;
+    }
+    .timer{
+      margin-top:18px;
+      font-size:3rem;
+      font-weight:700;
+      text-align:center;
+      letter-spacing:1px;
+    }
+    .mode{
+      text-align:center;
+      font-size:1.05rem;
+      margin-top:6px;
+      color:var(--accent1);
+      font-weight:700;
+    }
+    .progress-wrap{
+      margin-top:14px;
+      width:100%;
+      height:20px;
+      background:rgba(255,255,255,0.06);
+      border-radius:12px;
+      overflow:hidden;
+    }
+    .progress{
+      height:100%;
+      width:0%;
+      background:linear-gradient(90deg,var(--accent1),var(--accent2));
+      transition:width 1s linear;
+    }
+    .controls{
+      display:flex;
+      gap:10px;
+      justify-content:center;
+      margin-top:14px;
+      flex-wrap:wrap;
+    }
+    button{
+      cursor:pointer;
+      border:0;
+      padding:10px 16px;
+      border-radius:10px;
+      font-weight:700;
+      color:#062018;
+      background:var(--btn);
+      transition:transform .12s ease,opacity .12s;
+    }
+    button.secondary{
+      background:#ffd166;
+      color:#052117;
+    }
+    button.ghost{
+      background:transparent;
+      color:var(--muted);
+      border:1px solid rgba(255,255,255,0.04);
+    }
+    button:active{ transform:scale(.98) }
+    .small{
+      font-size:0.9rem;
+      padding:8px 12px;
+      border-radius:8px;
+    }
+    .footer{
+      margin-top:14px;
+      text-align:center;
+      color:var(--muted);
+      font-size:0.86rem;
+    }
+    @media(max-width:420px){
+      input[type="number"]{ width:100px }
+      .timer{ font-size:2.4rem }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>⏱️ Temporizador Deportivo (configurable + ciclos + pausa)</h1>
+
+    <div class="row" style="justify-content:space-between">
+      <div style="text-align:center">
+        <label>Ejercicio (segundos)</label><br>
+        <input id="exerciseTime" type="number" min="5" value="30">
+      </div>
+
+      <div style="text-align:center">
+        <label>Descanso (segundos)</label><br>
+        <input id="restTime" type="number" min="5" value="15">
+      </div>
+
+      <div style="text-align:center">
+        <label>Ciclos</label><br>
+        <input id="cycles" type="number" min="1" value="5">
+      </div>
+    </div>
+
+    <div class="timer" id="display">00:00</div>
+    <div class="mode" id="mode">Listo para empezar</div>
+
+    <div class="progress-wrap" aria-hidden="true">
+      <div class="progress" id="progressBar"></div>
+    </div>
+
+    <div class="controls">
+      <button id="startBtn" class="small" onclick="startBtnHandler()">▶ Iniciar</button>
+      <button id="pauseBtn" class="small secondary" onclick="pauseBtnHandler()">⏸ Pausar</button>
+      <button id="resetBtn" class="small ghost" onclick="resetTimer()">🔄 Reiniciar</button>
+    </div>
+
+    <div class="footer">Tu rutina. Tú mandas. 💪</div>
+  </div>
+
+<script>
+  // Estado global
+  let exerciseTime = 30;
+  let restTime = 15;
+  let totalCycles = 5;
+
+  let currentCycle = 0;
+  let isExercise = true;          // fase actual: true = ejercicio, false = descanso
+  let remaining = 0;              // segundos restantes en la fase actual
+  let running = false;            // si el intervalo está activo
+  let initialized = false;        // si ya se inició la sesión (evita reinicializar al reanudar)
+  let intervalId = null;
+
+  // Elementos DOM
+  const display = document.getElementById('display');
+  const mode = document.getElementById('mode');
+  const progressBar = document.getElementById('progressBar');
+  const startBtn = document.getElementById('startBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const exerciseInput = document.getElementById('exerciseTime');
+  const restInput = document.getElementById('restTime');
+  const cyclesInput = document.getElementById('cycles');
+
+  // Funciones auxiliares
+  function formatTime(sec){
+    const m = Math.floor(sec/60);
+    const s = sec % 60;
+    return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  function disableInputs(val){
+    exerciseInput.disabled = val;
+    restInput.disabled = val;
+    cyclesInput.disabled = val;
+  }
+
+  function updateUI(progressReset = false){
+    display.textContent = formatTime(remaining);
+    mode.textContent = isExercise
+      ? `🏋️‍♂️ Ejercicio (Ciclo ${currentCycle} de ${totalCycles})`
+      : `😌 Descanso (Ciclo ${currentCycle} de ${totalCycles})`;
+
+    // Barra de progreso por fase
+    const phaseTotal = isExercise ? exerciseTime : restTime;
+    const percent = phaseTotal > 0 ? ((phaseTotal - remaining) / phaseTotal) * 100 : 0;
+    if(progressReset){
+      // reiniciar animación
+      progressBar.style.transition = 'none';
+      progressBar.style.width = '0%';
+      // forzar reflow
+      void progressBar.offsetWidth;
+      progressBar.style.transition = 'width 1s linear';
+      progressBar.style.width = percent + '%';
+    } else {
+      progressBar.style.width = percent + '%';
+    }
+  }
+
+  function tick(){
+    if(!running) return;
+    remaining--;
+    if(remaining < 0) remaining = 0;
+    updateUI();
+
+    if(remaining <= 0){
+      // si terminamos la fase actual -> cambiar
+      if(isExercise){
+        // terminamos ejercicio -> pasar a descanso (misma ciclo)
+        isExercise = false;
+        remaining = restTime;
+        updateUI(true);
+      } else {
+        // terminamos descanso -> concluimos un ciclo
+        if(currentCycle >= totalCycles){
+          // todo completado
+          finishAll();
+          return;
+        } else {
+          currentCycle++;
+          isExercise = true;
+          remaining = exerciseTime;
+          updateUI(true);
+        }
+      }
+    }
+  }
+
+  function startTimer(){
+    if(!initialized){
+      // leer configuraciones al iniciar por primera vez
+      exerciseTime = Math.max(5, parseInt(exerciseInput.value) || 30);
+      restTime = Math.max(5, parseInt(restInput.value) || 15);
+      totalCycles = Math.max(1, parseInt(cyclesInput.value) || 1);
+
+      currentCycle = 1;
+      isExercise = true;
+      remaining = exerciseTime;
+      initialized = true;
+      updateUI(true);
+    }
+    if(!running){
+      running = true;
+      disableInputs(true);
+      // iniciar intervalo
+      intervalId = setInterval(tick, 1000);
+      startBtn.textContent = '▶ Iniciar';
+      pauseBtn.textContent = '⏸ Pausar';
+    }
+  }
+
+  function pauseTimer(){
+    if(running){
+      // pausar
+      running = false;
+      clearInterval(intervalId);
+      pauseBtn.textContent = '▶ Reanudar';
+    } else {
+      // reanudar
+      if(!initialized) startTimer();
+      running = true;
+      intervalId = setInterval(tick, 1000);
+      pauseBtn.textContent = '⏸ Pausar';
+    }
+  }
+
+  function resetTimer(){
+    running = false;
+    initialized = false;
+    clearInterval(intervalId);
+    disableInputs(false);
+    // lee valores actuales de inputs y actualiza la visualización al estado inicial
+    exerciseTime = Math.max(5, parseInt(exerciseInput.value) || 30);
+    restTime = Math.max(5, parseInt(restInput.value) || 15);
+    totalCycles = Math.max(1, parseInt(cyclesInput.value) || 1);
+    currentCycle = 0;
+    isExercise = true;
+    remaining = exerciseTime;
+    progressBar.style.transition = 'none';
+    progressBar.style.width = '0%';
+    // forzar reflow y restaurar transición
+    void progressBar.offsetWidth;
+    progressBar.style.transition = 'width 1s linear';
+    display.textContent = formatTime(remaining);
+    mode.textContent = 'Listo para empezar';
+    pauseBtn.textContent = '⏸ Pausar';
+  }
+
+  function finishAll(){
+    running = false;
+    clearInterval(intervalId);
+    disableInputs(false);
+    mode.textContent = '✅ Completado';
+    progressBar.style.width = '100%';
+  }
+
+  // Handlers para botones (expuestos en HTML)
+  function startBtnHandler(){
+    startTimer();
+  }
+  function pauseBtnHandler(){
+    pauseTimer();
+  }
+
+  // Inicializar vista: mostrar tiempo por defecto
+  (function init(){
+    exerciseTime = Math.max(5, parseInt(exerciseInput.value) || 30);
+    restTime = Math.max(5, parseInt(restInput.value) || 15);
+    totalCycles = Math.max(1, parseInt(cyclesInput.value) || 1);
+    remaining = exerciseTime;
+    display.textContent = formatTime(remaining);
+    mode.textContent = 'Listo para empezar';
+  })();
+
+</script>
+</body>
+</html>
