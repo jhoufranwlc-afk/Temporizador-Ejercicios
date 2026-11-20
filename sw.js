@@ -1,8 +1,8 @@
 // Guarda la app (y su tipografía) en el teléfono para que abra sin internet.
 // Si cambias algún archivo, sube el número de versión (v1 -> v2) para que se actualice.
-var CACHE = 'loch-timer-v1';
+var CACHE = 'loch-timer-v2';
 var FILES = [
-  './', 'index.html', 'manifest.webmanifest',
+  './', 'index.html', 'figures.js', 'manifest.webmanifest',
   'icon-192.png', 'icon-512.png', 'apple-touch-icon.png',
   'fonts/barlow-condensed-600.woff2', 'fonts/barlow-condensed-700.woff2', 'fonts/barlow-condensed-800.woff2'
 ];
