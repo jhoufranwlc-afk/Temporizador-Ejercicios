@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LOCH Timer</title>
+<meta name="theme-color" content="#e8eaed" id="themeColor">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="LOCH Timer">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="preload" href="fonts/barlow-condensed-800.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+@font-face { font-family: "Barlow Condensed"; font-weight: 600; font-style: normal; font-display: swap; src: url("fonts/barlow-condensed-600.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Condensed"; font-weight: 700; font-style: normal; font-display: swap; src: url("fonts/barlow-condensed-700.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Condensed"; font-weight: 800; font-style: normal; font-display: swap; src: url("fonts/barlow-condensed-800.woff2") format("woff2"); }
+
+/* Concepto: marcador de gimnasio. Pantalla de ajustes sobria (gris concreto) y, al entrenar,
+   la pantalla entera cambia de color según la fase para leerla desde lejos. */
+:root {
+  color-scheme: light dark;
+  --paper: #e8eaed; --card: #f7f8fa; --ink: #12141a; --muted: #596072; --line: #cdd2da;
+  --work: #ff5a1f; --on-work: #14090a;
+  --rest: #2f6bff; --on-rest: #ffffff;
+  --prep: #ffc61a; --on-prep: #14110a;
+  --done: #1fbf75; --on-done: #07140d;
+  --disp: "Barlow Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --ring: min(84vw, 42vh, 480px);
+}
+@media (prefers-color-scheme: dark) {
+  :root { --paper: #0f1218; --card: #181c25; --ink: #eef0f4; --muted: #9aa2b4; --line: #2a303d; }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+html { background: var(--paper); }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font-family: var(--body); font-size: 16px; line-height: 1.4;
+  -webkit-font-smoothing: antialiased; overflow-x: hidden;
+  transition: background-color 0.25s, color 0.25s;
+}
+body[data-screen="run"][data-phase="prep"] { --p-bg: var(--prep); --p-fg: var(--on-prep); }
+body[data-screen="run"][data-phase="work"] { --p-bg: var(--work); --p-fg: var(--on-work); }
+body[data-screen="run"][data-phase="rest"] { --p-bg: var(--rest); --p-fg: var(--on-rest); }
+body[data-screen="done"] { --p-bg: var(--done); --p-fg: var(--on-done); }
+body[data-screen="run"], body[data-screen="done"] { background: var(--p-bg); color: var(--p-fg); }
+
+.screen {
+  max-width: 560px; margin: 0 auto; min-height: 100vh; min-height: 100dvh;
+  display: flex; flex-direction: column; gap: 16px;
+  padding-top: max(16px, env(safe-area-inset-top, 0px));
+  padding-bottom: max(18px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(18px, env(safe-area-inset-left, 0px));
+  padding-right: max(18px, env(safe-area-inset-right, 0px));
+}
+button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }
+button:focus-visible, input:focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
+.k { font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; font-size: 0.82rem; opacity: 0.7; }
+
+/* ---------- Ajustes ---------- */
+.bar { display: flex; align-items: center; justify-content: space-between; }
+.brand { font-family: var(--disp); font-weight: 800; letter-spacing: 0.16em; font-size: 1.1rem; display: flex; align-items: center; }
+.brand i { display: inline-block; width: 0.28em; height: 1em; margin: 0 0.5em; background: var(--work); transform: skewX(-20deg); }
+.iconbtn { width: 44px; height: 44px; border-radius: 50%; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); display: grid; place-items: center; padding: 0; }
+.iconbtn svg { width: 22px; height: 22px; }
+.board { display: flex; flex-direction: column; gap: 2px; padding: 6px 0 2px; }
+.board .k { color: var(--muted); opacity: 1; }
+.board .big { font-family: var(--disp); font-weight: 800; font-size: clamp(4.6rem, 24vw, 7.4rem); line-height: 0.9; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.board .sum { color: var(--muted); font-size: 0.95rem; }
+.presets { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x proximity; margin: 0 -18px; padding: 2px 18px 6px; scrollbar-width: none; }
+.presets::-webkit-scrollbar { display: none; }
+.chip { flex: none; scroll-snap-align: start; font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.98rem;
+  padding: 9px 14px; border-radius: 8px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); min-height: 42px; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.step { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 10px 10px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.step .lab { font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; font-size: 0.85rem; color: var(--muted); display: flex; align-items: center; gap: 8px; padding-left: 2px; }
+.step .lab::before { content: ""; width: 10px; height: 10px; background: var(--dot, var(--ink)); border-radius: 2px; }
+.ctl { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 4px; }
+.sbtn { width: 44px; height: 48px; border-radius: 12px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); display: grid; place-items: center; padding: 0; user-select: none; -webkit-user-select: none; }
+.sbtn:active { transform: scale(0.94); }
+.sbtn svg { width: 22px; height: 22px; pointer-events: none; }
+.valwrap { text-align: center; min-width: 0; }
+.val { width: 100%; font-family: var(--disp); font-weight: 800; font-size: 2.7rem; line-height: 1; text-align: center; background: transparent; border: 0; color: var(--ink); padding: 0; margin: 0; font-variant-numeric: tabular-nums; -moz-appearance: textfield; appearance: none; border-radius: 6px; }
+.unit { display: block; font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+.cta { margin-top: auto; border: 0; height: 68px; border-radius: 14px; background: var(--work); color: var(--on-work);
+  font-family: var(--disp); font-weight: 800; text-transform: uppercase; letter-spacing: 0.16em; font-size: 1.75rem;
+  display: flex; align-items: center; justify-content: center; gap: 12px; box-shadow: 0 6px 0 rgba(0, 0, 0, 0.25); }
+.cta:active { transform: translateY(4px); box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25); }
+.cta svg { width: 26px; height: 26px; }
+.hint { margin: 0; text-align: center; color: var(--muted); font-size: 0.8rem; }
+
+/* ---------- Entrenando ---------- */
+#run { gap: 14px; }
+.rbar { display: flex; justify-content: space-between; align-items: flex-end; }
+.rbar > div { display: flex; flex-direction: column; gap: 0; }
+.rbar > div:last-child { text-align: right; }
+.rbar b { font-family: var(--disp); font-weight: 800; font-size: 1.7rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.phase { text-align: center; font-family: var(--disp); font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; font-size: clamp(2.8rem, 14vw, 4.6rem); line-height: 1; }
+.dial { position: relative; width: var(--ring); height: var(--ring); margin: auto; flex: none; display: grid; place-items: center; transition: opacity 0.2s; }
+.dial.paused { opacity: 0.5; }
+.dial svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.track { fill: none; stroke: currentColor; stroke-opacity: 0.22; stroke-width: 5; }
+.arc { fill: none; stroke: currentColor; stroke-width: 5; stroke-linecap: butt; }
+.num { font-family: var(--disp); font-weight: 800; font-size: calc(var(--ring) * 0.52); line-height: 1; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.num.long { font-size: calc(var(--ring) * 0.38); }
+.next { text-align: center; font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; font-size: 1.1rem; opacity: 0.85; min-height: 1.5em; }
+.segs { display: flex; gap: 4px; height: 12px; }
+.segs span { flex: 1; min-width: 2px; border-radius: 3px; background: currentColor; opacity: 0.22; }
+.segs span.done { opacity: 1; }
+.segs span.cur { opacity: 0.6; }
+.ctrls { margin-top: 6px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; }
+.pbtn { width: 96px; height: 96px; border-radius: 50%; border: 0; background: var(--p-fg); color: var(--p-bg); display: grid; place-items: center; padding: 0; }
+.pbtn:active { transform: scale(0.95); }
+.pbtn svg { width: 44px; height: 44px; }
+.sec { height: 58px; border-radius: 14px; border: 2px solid currentColor; background: transparent; color: inherit; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0 8px;
+  font-family: var(--disp); font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; font-size: 1.05rem; }
+.sec:active { transform: scale(0.97); }
+.sec svg { width: 22px; height: 22px; flex: none; }
+.sec.armed { background: var(--p-fg); color: var(--p-bg); }
+
+/* ---------- Final ---------- */
+#done { justify-content: center; gap: 22px; }
+.done-title { font-family: var(--disp); font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; font-size: clamp(2.6rem, 15.5vw, 5.4rem); line-height: 0.92; margin: 0; overflow-wrap: anywhere; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.stats div { border-top: 3px solid currentColor; padding-top: 8px; }
+.stats b { display: block; font-family: var(--disp); font-weight: 800; font-size: 2.2rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.done-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.done-actions .cta { margin-top: 0; background: var(--p-fg); color: var(--p-bg); box-shadow: none; }
+.done-actions .sec { height: 56px; }
+
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (orientation: landscape) and (max-height: 520px) {
+  :root { --ring: min(68vh, 38vw); }
+  #run { max-width: none; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto auto auto 1fr; column-gap: 28px; row-gap: 10px; align-content: start; }
+  #run .rbar { grid-column: 1 / -1; grid-row: 1; }
+  #run .dial { grid-column: 1; grid-row: 2 / 6; align-self: center; }
+  #run .phase { grid-column: 2; grid-row: 2; text-align: left; font-size: 3.4rem; }
+  #run .next { grid-column: 2; grid-row: 3; text-align: left; }
+  #run .segs { grid-column: 2; grid-row: 4; }
+  #run .ctrls { grid-column: 2; grid-row: 5; align-self: end; }
+  .pbtn { width: 78px; height: 78px; }
+  #setup { max-width: 720px; }
+}
+@media (prefers-reduced-motion: reduce) { body, .dial, .sbtn, .cta, .pbtn { transition: none; } }
+</style>
+</head>
+<body data-screen="setup">
+
+<main>
+  <!-- AJUSTES -->
+  <section id="setup" class="screen">
+    <header class="bar">
+      <div class="brand" aria-label="LOCH Timer">LOCH<i></i>TIMER</div>
+      <button id="sound" class="iconbtn" type="button" aria-pressed="true" aria-label="Sonido y vibración: activados"></button>
+    </header>
+
+    <div class="board" aria-live="polite">
+      <span class="k">Duración total</span>
+      <span class="big" id="total">00:00</span>
+      <span class="sum" id="summary"></span>
+    </div>
+
+    <div class="presets" id="presets" role="group" aria-label="Rutinas rápidas"></div>
+
+    <div class="grid" id="grid"></div>
+
+    <button id="start" class="cta" type="button">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg>Empezar
+    </button>
+    <p class="hint">La pantalla se mantiene encendida mientras entrenas.</p>
+  </section>
+
+  <!-- ENTRENANDO -->
+  <section id="run" class="screen" hidden>
+    <div class="rbar">
+      <div><span class="k">Serie</span><b id="setTxt">1/5</b></div>
+      <div><span class="k">Quedan</span><b id="leftTxt">00:00</b></div>
+    </div>
+    <div class="phase" id="phaseName">Trabajo</div>
+    <div class="dial" id="dial" role="timer" aria-label="Tiempo de la fase">
+      <svg viewBox="0 0 100 100" aria-hidden="true">
+        <circle class="track" cx="50" cy="50" r="46"/>
+        <circle class="arc" id="arc" cx="50" cy="50" r="46" pathLength="100" stroke-dasharray="100" stroke-dashoffset="0"/>
+      </svg>
+      <div class="num" id="num">00</div>
+    </div>
+    <div class="next" id="nextTxt"></div>
+    <div class="segs" id="segs" aria-hidden="true"></div>
+    <div class="ctrls">
+      <button id="exit" class="sec" type="button"></button>
+      <button id="pause" class="pbtn" type="button" aria-label="Pausar"></button>
+      <button id="skip" class="sec" type="button"></button>
+    </div>
+  </section>
+
+  <!-- FINAL -->
+  <section id="done" class="screen" hidden>
+    <div class="k">Entrenamiento</div>
+    <h2 class="done-title">Completado</h2>
+    <div class="stats">
+      <div><span class="k">Tiempo</span><b id="stTotal">00:00</b></div>
+      <div><span class="k">Series</span><b id="stSets">0</b></div>
+      <div><span class="k">Trabajo</span><b id="stWork">00:00</b></div>
+    </div>
+    <div class="done-actions">
+      <button id="again" class="cta" type="button">Repetir</button>
+      <button id="change" class="sec" type="button">Cambiar rutina</button>
+    </div>
+  </section>
+</main>
+<div class="sr" id="announce" aria-live="assertive"></div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ---------- Datos ---------- */
+  var FIELDS = [
+    { k: 'work', t: 'Trabajo', min: 5, max: 600, step: 5, unit: 'seg', dot: 'var(--work)' },
+    { k: 'rest', t: 'Descanso', min: 0, max: 600, step: 5, unit: 'seg', dot: 'var(--rest)' },
+    { k: 'sets', t: 'Series', min: 1, max: 99, step: 1, unit: 'series', dot: 'var(--ink)' },
+    { k: 'prep', t: 'Preparación', min: 0, max: 60, step: 5, unit: 'seg', dot: 'var(--prep)' }
+  ];
+  var PRESETS = [
+    { n: 'Mi rutina', v: { prep: 5, work: 30, rest: 15, sets: 5 } },
+    { n: 'Tabata', v: { prep: 5, work: 20, rest: 10, sets: 8 } },
+    { n: 'HIIT', v: { prep: 5, work: 30, rest: 15, sets: 10 } },
+    { n: 'Resistencia', v: { prep: 5, work: 45, rest: 15, sets: 6 } },
+    { n: 'Fuerza', v: { prep: 10, work: 40, rest: 60, sets: 5 } }
+  ];
+  var KEY = 'loch-timer-v1';
+  var cfg = { prep: 5, work: 30, rest: 15, sets: 5 };
+  var sound = true;
+  var ICON = {
+    play: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z"/></svg>',
+    skip: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 5l10 7-10 7V5zm11 0h3v14h-3z"/></svg>',
+    exit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    minus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg>',
+    plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+    on: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 010 7M19 6a8.5 8.5 0 010 12"/></svg>',
+    off: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M17 9.5l4.5 5M21.5 9.5l-4.5 5"/></svg>'
+  };
+
+  function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function clock(sec) { sec = Math.max(0, Math.round(sec)); return pad(Math.floor(sec / 60)) + ':' + pad(sec % 60); }
+  function short(sec) { return sec >= 60 ? Math.floor(sec / 60) + ':' + pad(sec % 60) : String(sec); }
+
+  function load() {
+    try {
+      var s = JSON.parse(localStorage.getItem(KEY) || 'null');
+      if (s && s.cfg) FIELDS.forEach(function (f) { if (typeof s.cfg[f.k] === 'number') cfg[f.k] = clamp(Math.round(s.cfg[f.k]), f.min, f.max); });
+      if (s && typeof s.sound === 'boolean') sound = s.sound;
+    } catch (e) {}
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify({ cfg: cfg, sound: sound })); } catch (e) {} }
+  load();
+
+  /* ---------- Ajustes ---------- */
+  $('grid').innerHTML = FIELDS.map(function (f) {
+    return '<div class="step" data-k="' + f.k + '" style="--dot:' + f.dot + '">' +
+      '<label class="lab" for="in-' + f.k + '">' + f.t + '</label>' +
+      '<div class="ctl"><button class="sbtn" type="button" data-d="-1" aria-label="Menos ' + f.t.toLowerCase() + '">' + ICON.minus + '</button>' +
+      '<div class="valwrap"><input id="in-' + f.k + '" class="val" inputmode="numeric" pattern="[0-9]*" maxlength="3" autocomplete="off"><span class="unit">' + f.unit + '</span></div>' +
+      '<button class="sbtn" type="button" data-d="1" aria-label="Más ' + f.t.toLowerCase() + '">' + ICON.plus + '</button></div></div>';
+  }).join('');
+  $('presets').innerHTML = PRESETS.map(function (p, i) {
+    return '<button class="chip" type="button" data-i="' + i + '" aria-pressed="false">' + p.n + '</button>';
+  }).join('');
+
+  function totalSec() { return cfg.work * cfg.sets + cfg.rest * (cfg.sets - 1); }
+  function paintSetup(skipInputs) {
+    if (!skipInputs) FIELDS.forEach(function (f) { $('in-' + f.k).value = cfg[f.k]; });
+    $('total').textContent = clock(totalSec());
+    $('summary').textContent = cfg.sets + (cfg.sets === 1 ? ' serie' : ' series') + ' · ' + cfg.work + ' s trabajo · ' + (cfg.rest > 0 ? cfg.rest + ' s descanso' : 'sin descanso') + (cfg.prep > 0 ? ' · ' + cfg.prep + ' s preparación' : '');
+    document.querySelectorAll('.chip').forEach(function (c) {
+      var v = PRESETS[+c.getAttribute('data-i')].v;
+      c.setAttribute('aria-pressed', String(FIELDS.every(function (f) { return v[f.k] === cfg[f.k]; })));
+    });
+    $('sound').innerHTML = sound ? ICON.on : ICON.off;
+    $('sound').setAttribute('aria-pressed', String(sound));
+    $('sound').setAttribute('aria-label', 'Sonido y vibración: ' + (sound ? 'activados' : 'desactivados'));
+  }
+  function bump(k, d) {
+    var f = FIELDS.filter(function (x) { return x.k === k; })[0], v = cfg[k];
+    v = d > 0 ? (Math.floor(v / f.step) + 1) * f.step : (Math.ceil(v / f.step) - 1) * f.step;
+    cfg[k] = clamp(v, f.min, f.max);
+    save(); paintSetup();
+  }
+  var holdT = null, holdI = null;
+  function stopHold() { clearTimeout(holdT); clearInterval(holdI); holdT = holdI = null; }
+  $('grid').addEventListener('pointerdown', function (e) {
+    var b = e.target.closest('.sbtn'); if (!b) return;
+    e.preventDefault(); stopHold();
+    var k = b.closest('.step').getAttribute('data-k'), d = +b.getAttribute('data-d');
+    bump(k, d);
+    holdT = setTimeout(function () { holdI = setInterval(function () { bump(k, d); }, 80); }, 380);
+  });
+  window.addEventListener('pointerup', stopHold);
+  window.addEventListener('pointercancel', stopHold);
+  window.addEventListener('blur', stopHold);
+  $('grid').addEventListener('contextmenu', function (e) { if (e.target.closest('.sbtn')) e.preventDefault(); });
+  $('grid').addEventListener('keydown', function (e) {
+    var b = e.target.closest && e.target.closest('.sbtn');
+    if (b && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      bump(b.closest('.step').getAttribute('data-k'), +b.getAttribute('data-d'));
+    }
+  });
+  $('grid').addEventListener('input', function (e) {
+    var inp = e.target; if (!inp.classList.contains('val')) return;
+    var k = inp.id.slice(3), f = FIELDS.filter(function (x) { return x.k === k; })[0];
+    inp.value = inp.value.replace(/\D/g, '');
+    if (inp.value === '') return;
+    cfg[k] = clamp(parseInt(inp.value, 10), f.min, f.max);
+    save(); paintSetup(true);
+  });
+  $('grid').addEventListener('focusout', function (e) { if (e.target.classList.contains('val')) paintSetup(); });
+  $('grid').addEventListener('focusin', function (e) { if (e.target.classList.contains('val')) e.target.select(); });
+  $('presets').addEventListener('click', function (e) {
+    var c = e.target.closest('.chip'); if (!c) return;
+    var v = PRESETS[+c.getAttribute('data-i')].v;
+    FIELDS.forEach(function (f) { cfg[f.k] = v[f.k]; });
+    save(); paintSetup();
+  });
+  $('sound').addEventListener('click', function () {
+    sound = !sound; save(); paintSetup();
+    if (sound) { initAudio(); tone(880, 0, 0.12, 0.25); }
+  });
+
+  /* ---------- Audio y vibración ---------- */
+  var ac = null;
+  function initAudio() {
+    try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); } catch (e) {}
+  }
+  function tone(freq, t0, dur, vol, type) {
+    if (!ac || !sound) return;
+    try {
+      var o = ac.createOscillator(), g = ac.createGain(), s = ac.currentTime + t0;
+      o.type = type || 'sine'; o.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, s);
+      g.gain.exponentialRampToValueAtTime(vol || 0.3, s + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, s + dur);
+      o.connect(g); g.connect(ac.destination); o.start(s); o.stop(s + dur + 0.03);
+    } catch (e) {}
+  }
+  function buzz(p) { if (sound && navigator.vibrate) { try { navigator.vibrate(p); } catch (e) {} } }
+  var SND = {
+    tick: function () { tone(880, 0, 0.09, 0.28); },
+    work: function () { tone(1175, 0, 0.55, 0.38, 'triangle'); buzz(220); },
+    rest: function () { tone(587, 0, 0.16, 0.34); tone(587, 0.22, 0.16, 0.34); buzz([110, 70, 110]); },
+    done: function () { [523, 659, 784, 1047].forEach(function (f, i) { tone(f, i * 0.16, 0.4, 0.36, 'triangle'); }); buzz([200, 100, 200, 100, 400]); }
+  };
+
+  /* ---------- Pantalla siempre encendida ---------- */
+  var wl = null;
+  function acquireWake() {
+    try {
+      if ('wakeLock' in navigator) {
+        navigator.wakeLock.request('screen').then(function (l) { wl = l; l.addEventListener('release', function () { wl = null; }); }, function () {});
+      }
+    } catch (e) {}
+  }
+  function releaseWake() { try { if (wl) wl.release(); } catch (e) {} wl = null; }
+
+  /* ---------- Motor del temporizador ---------- */
+  var run = null, loop = null, lastTick = 0, lastSec = -1;
+  function durOf(ph) { return (ph === 'prep' ? cfg.prep : ph === 'work' ? cfg.work : cfg.rest) * 1000; }
+  function following(ph, set) {
+    if (ph === 'prep') return { phase: 'work', set: 1 };
+    if (ph === 'work') {
+      if (set >= cfg.sets) return null;
+      return cfg.rest > 0 ? { phase: 'rest', set: set } : { phase: 'work', set: set + 1 };
+    }
+    return { phase: 'work', set: set + 1 };
+  }
+  function startPhase(ph, set, t0) {
+    run.phase = ph; run.set = set; run.dur = durOf(ph); run.endAt = t0 + run.dur; run.t0 = t0; lastTick = 0;
+  }
+  function remainingMs(now) { return run.paused ? run.remaining : Math.max(0, run.endAt - now); }
+
+  function begin() {
+    initAudio(); acquireWake();
+    run = { paused: false, remaining: 0, finished: false };
+    var now = Date.now();
+    startPhase(cfg.prep > 0 ? 'prep' : 'work', 1, now);
+    buildSegs(); show('run'); phaseStarted(true, true); render(now);
+    clearInterval(loop); loop = setInterval(step, 100);
+    $('exit').classList.remove('armed'); paintControls();
+  }
+  function step() {
+    if (!run || run.paused || run.finished) return;
+    var now = Date.now(), changed = false, guard = 0;
+    while (now >= run.endAt && guard++ < 500) {
+      var nx = following(run.phase, run.set);
+      if (!nx) { finish(); return; }
+      startPhase(nx.phase, nx.set, run.endAt); changed = true;
+    }
+    if (changed) phaseStarted(now - run.t0 < 1500, false);
+    var sec = Math.ceil((run.endAt - now) / 1000);
+    if (sec >= 1 && sec <= 3 && sec !== lastTick && run.dur >= 4000) { lastTick = sec; SND.tick(); }
+    render(now);
+  }
+  function phaseStarted(audible, first) {
+    var ph = run.phase;
+    document.body.setAttribute('data-phase', ph);
+    $('themeColor').setAttribute('content', ph === 'work' ? '#ff5a1f' : ph === 'rest' ? '#2f6bff' : '#ffc61a');
+    var name = ph === 'prep' ? 'Prepárate' : ph === 'work' ? 'Trabajo' : 'Descanso';
+    $('phaseName').textContent = name;
+    $('setTxt').textContent = ph === 'prep' ? '—' : run.set + '/' + cfg.sets;
+    $('announce').textContent = name + (ph === 'prep' ? '' : ', serie ' + run.set + ' de ' + cfg.sets);
+    var completed = ph === 'rest' ? run.set : ph === 'work' ? run.set - 1 : 0;
+    var segs = $('segs').children;
+    for (var i = 0; i < segs.length; i++) segs[i].className = i < completed ? 'done' : i === completed ? 'cur' : '';
+    var nx = following(ph, run.set);
+    $('nextTxt').textContent = !nx ? 'Última serie' : 'Siguiente · ' + (nx.phase === 'work' ? 'Trabajo ' : 'Descanso ') + clock(durOf(nx.phase) / 1000);
+    lastSec = -1;
+    if (audible && !first) { if (ph === 'work') SND.work(); else if (ph === 'rest') SND.rest(); }
+    if (first && ph === 'work') SND.work();
+  }
+  function buildSegs() {
+    var h = ''; for (var i = 0; i < cfg.sets; i++) h += '<span></span>'; $('segs').innerHTML = h;
+  }
+  function render(now) {
+    var rem = remainingMs(now), sec = Math.ceil(rem / 1000);
+    if (sec !== lastSec) {
+      lastSec = sec;
+      var txt = short(sec); $('num').textContent = txt;
+      $('num').classList.toggle('long', txt.length > 2);
+      var left = rem, p = run.phase, s = run.set, nx;
+      while ((nx = following(p, s))) { left += durOf(nx.phase); p = nx.phase; s = nx.set; }
+      $('leftTxt').textContent = clock(Math.ceil(left / 1000));
+    }
+    var prog = run.dur > 0 ? 1 - rem / run.dur : 1;
+    var off = clamp(prog, 0, 1) * 100;
+    $('arc').setAttribute('stroke-dashoffset', off.toFixed(2));
+    $('arc').style.opacity = off >= 99.6 ? 0 : 1;
+  }
+  function paintControls() {
+    $('pause').innerHTML = run.paused ? ICON.play : ICON.pause;
+    $('pause').setAttribute('aria-label', run.paused ? 'Seguir' : 'Pausar');
+    $('dial').classList.toggle('paused', run.paused);
+    $('skip').innerHTML = ICON.skip + 'Saltar';
+    if (!$('exit').classList.contains('armed')) $('exit').innerHTML = ICON.exit + 'Salir';
+  }
+  function togglePause() {
+    if (!run || run.finished) return;
+    var now = Date.now();
+    if (run.paused) { run.endAt = now + run.remaining; run.paused = false; run.t0 = run.endAt - run.dur; $('nextTxt').textContent = ''; phaseNext(); acquireWake(); initAudio(); }
+    else { run.remaining = Math.max(0, run.endAt - now); run.paused = true; $('nextTxt').textContent = 'En pausa'; }
+    paintControls(); render(now);
+  }
+  function phaseNext() {
+    var nx = following(run.phase, run.set);
+    $('nextTxt').textContent = !nx ? 'Última serie' : 'Siguiente · ' + (nx.phase === 'work' ? 'Trabajo ' : 'Descanso ') + clock(durOf(nx.phase) / 1000);
+  }
+  function skip() {
+    if (!run || run.finished) return;
+    var nx = following(run.phase, run.set), now = Date.now();
+    if (!nx) { finish(); return; }
+    startPhase(nx.phase, nx.set, now);
+    if (run.paused) run.remaining = run.dur;
+    phaseStarted(true, false);
+    if (run.paused) $('nextTxt').textContent = 'En pausa';
+    render(now);
+  }
+  function finish() {
+    run.finished = true; clearInterval(loop); releaseWake();
+    $('stTotal').textContent = clock(totalSec());
+    $('stSets').textContent = cfg.sets;
+    $('stWork').textContent = clock(cfg.work * cfg.sets);
+    show('done'); SND.done();
+    $('announce').textContent = 'Entrenamiento completado';
+  }
+  function stopAll() { clearInterval(loop); releaseWake(); run = null; show('setup'); }
+
+  var armTimer = null;
+  $('exit').addEventListener('click', function () {
+    var b = $('exit');
+    if (b.classList.contains('armed')) { clearTimeout(armTimer); b.classList.remove('armed'); stopAll(); return; }
+    b.classList.add('armed'); b.innerHTML = ICON.exit + '¿Seguro?';
+    armTimer = setTimeout(function () { b.classList.remove('armed'); if (run) paintControls(); }, 3000);
+  });
+  $('pause').addEventListener('click', togglePause);
+  $('skip').addEventListener('click', skip);
+  $('start').addEventListener('click', begin);
+  $('again').addEventListener('click', begin);
+  $('change').addEventListener('click', stopAll);
+  document.addEventListener('keydown', function (e) {
+    if (e.code === 'Space' && run && !run.finished && document.body.getAttribute('data-screen') === 'run') { e.preventDefault(); togglePause(); }
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && run && !run.finished) {
+      if (ac && ac.state === 'suspended') { try { ac.resume(); } catch (e) {} }
+      if (!wl && !run.paused) acquireWake();
+      step();
+    }
+  });
+
+  function show(screen) {
+    ['setup', 'run', 'done'].forEach(function (id) { $(id).hidden = id !== screen; });
+    document.body.setAttribute('data-screen', screen);
+    if (screen === 'setup') {
+      document.body.removeAttribute('data-phase');
+      var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      $('themeColor').setAttribute('content', dark ? '#0f1218' : '#e8eaed');
+      paintSetup();
+    } else if (screen === 'done') {
+      $('themeColor').setAttribute('content', '#1fbf75');
+    }
+    window.scrollTo(0, 0);
+  }
+
+  paintSetup();
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+  }
+})();
+</script>
+</body>
+</html>
